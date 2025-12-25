@@ -3,203 +3,301 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Motion Diagnostic</title>
+    <title>Motion Mouse - Final</title>
     <style>
         body {
-            font-family: 'Courier New', Courier, monospace;
-            background-color: #000;
-            color: #0f0;
-            padding: 15px;
+            background-color: #222;
+            color: white;
+            font-family: sans-serif;
             margin: 0;
             height: 100vh;
             display: flex;
             flex-direction: column;
-        }
-
-        h1 { color: #fff; font-size: 1.2rem; margin: 0 0 10px 0; border-bottom: 1px solid #333; padding-bottom: 10px; }
-
-        .status-box {
-            background: #111;
-            border: 1px solid #333;
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 4px;
-        }
-
-        .row { display: flex; justify-content: space-between; margin-bottom: 5px; }
-        .label { color: #888; }
-        .val { font-weight: bold; color: #fff; }
-        .active { color: #0f0; }
-        .error { color: #f00; }
-
-        #cursorArea {
-            flex: 1;
-            background: #222;
-            border: 2px solid #444;
-            position: relative;
-            margin-bottom: 10px;
-            border-radius: 8px;
             overflow: hidden;
         }
 
-        #cursor {
-            width: 30px; height: 30px;
-            background: red; border-radius: 50%;
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-            box-shadow: 0 0 10px red;
+        /* Top Bar */
+        header {
+            padding: 15px;
+            background: #333;
+            text-align: center;
+            font-weight: bold;
+            border-bottom: 1px solid #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .debug { font-size: 0.8rem; font-family: monospace; color: #aaa; }
+
+        /* The Trackpad */
+        #trackpad {
+            flex: 1;
+            position: relative;
+            background: radial-gradient(circle, #333 1px, transparent 1px);
+            background-size: 30px 30px;
+            background-color: #1a1a1a;
+            overflow: hidden;
+            border-bottom: 1px solid #444;
         }
 
-        #logArea {
-            height: 100px;
-            background: #000;
-            border: 1px solid #333;
-            overflow-y: scroll;
-            font-size: 10px;
-            color: #aaa;
-            padding: 5px;
-            margin-bottom: 10px;
+        /* The Cursor */
+        #cursor {
+            width: 40px;
+            height: 40px;
+            background: #00e5ff;
+            border-radius: 50%;
+            position: absolute;
+            top: 0; 
+            left: 0;
+            /* We use translate for high performance movement */
+            transform: translate3d(0px, 0px, 0); 
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.6);
+            pointer-events: none;
+            will-change: transform;
+        }
+
+        /* Controls */
+        #controls {
+            padding: 20px;
+            background: #222;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            padding-bottom: 40px; /* Safe area for mobile */
         }
 
         button {
-            width: 100%;
             padding: 20px;
-            background: #0066cc;
-            color: white;
+            font-size: 1.1rem;
             border: none;
-            font-size: 1.2rem;
+            border-radius: 8px;
             font-weight: bold;
-            border-radius: 5px;
+            cursor: pointer;
         }
-        button:disabled { background: #333; color: #666; }
+
+        #btnStart { background: #4CAF50; color: white; }
+        #btnCal { background: #2196F3; color: white; }
+        
+        button:disabled { background: #555; color: #888; }
+
+        .status-msg {
+            grid-column: 1 / -1;
+            text-align: center;
+            font-size: 0.9rem;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
     </style>
 </head>
 <body>
 
-    <h1>SENSOR DIAGNOSTIC</h1>
+    <header>
+        <div>Mobile Mouse</div>
+        <div id="debugInfo" class="debug">Waiting...</div>
+    </header>
 
-    <div class="status-box">
-        <div class="row"><span class="label">Permission State:</span> <span id="permStatus" class="val">Unknown</span></div>
-        <div class="row"><span class="label">Sensor Stream:</span> <span id="sensorStatus" class="val">Inactive</span></div>
-        <div class="row"><span class="label">Beta (Tilt Y):</span> <span id="betaVal" class="val">0</span></div>
-        <div class="row"><span class="label">Gamma (Tilt X):</span> <span id="gammaVal" class="val">0</span></div>
-        <div class="row"><span class="label">Accel X:</span> <span id="accXVal" class="val">0</span></div>
-    </div>
-
-    <div id="cursorArea">
+    <div id="trackpad">
         <div id="cursor"></div>
-        <div style="position:absolute; top:10px; left:10px; color:#555; font-size:0.8rem;">Visual Output</div>
     </div>
 
-    <div style="color: #fff; font-size: 0.8rem; margin-bottom: 2px;">Live System Log:</div>
-    <div id="logArea"></div>
-
-    <button id="startBtn">ENABLE & DIAGNOSE</button>
+    <div id="controls">
+        <div class="status-msg" id="statusText">Hold phone comfortably -> Press Calibrate</div>
+        <button id="btnStart">1. Start Sensors</button>
+        <button id="btnCal" disabled>2. Calibrate (Set Zero)</button>
+    </div>
 
     <script>
-        const logEl = document.getElementById('logArea');
+        // --- Elements ---
         const cursor = document.getElementById('cursor');
-        const permStatus = document.getElementById('permStatus');
-        const sensorStatus = document.getElementById('sensorStatus');
-        
-        let curX = 50;
-        let curY = 50;
-        let sensitivity = 2.0; // Increased for testing
+        const btnStart = document.getElementById('btnStart');
+        const btnCal = document.getElementById('btnCal');
+        const debugInfo = document.getElementById('debugInfo');
+        const statusText = document.getElementById('statusText');
+        const trackpad = document.getElementById('trackpad');
 
-        function log(msg) {
-            const line = document.createElement('div');
-            line.textContent = "> " + msg;
-            logEl.appendChild(line);
-            logEl.scrollTop = logEl.scrollHeight;
-            console.log(msg);
+        // --- State ---
+        let isRunning = false;
+        let pos = { x: 0, y: 0 }; // Cursor position in pixels
+        let center = { beta: 0, gamma: 0 }; // The "Zero" angles
+        let calibrated = false;
+        
+        // Config
+        const sensitivity = 3.0; // Increase to move faster
+
+        // --- Initialize Position ---
+        // Center the cursor in the middle of the trackpad on load
+        function centerCursor() {
+            const rect = trackpad.getBoundingClientRect();
+            pos.x = rect.width / 2 - 20; // 20 is half cursor width
+            pos.y = rect.height / 2 - 20;
+            updateCursorVisual();
+        }
+        
+        window.addEventListener('resize', centerCursor);
+        // Call once after a short delay to ensure layout is done
+        setTimeout(centerCursor, 100);
+
+        function updateCursorVisual() {
+            // Using translate3d is much smoother than changing top/left
+            cursor.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;
         }
 
-        // Catch any global errors
-        window.onerror = function(message, source, lineno, colno, error) {
-            log("JS ERROR: " + message);
-        };
+        // --- Sensor Logic ---
 
         function handleOrientation(event) {
-            log("Orientation Event Fired");
-            sensorStatus.textContent = "Receiving Data";
-            sensorStatus.classList.add("active");
+            if (!isRunning || !calibrated) return;
 
-            // Get values, handle nulls
-            let b = event.beta || 0;
-            let g = event.gamma || 0;
-            let a = event.alpha || 0;
+            let beta = event.beta;   // Front/Back tilt (-180 to 180)
+            let gamma = event.gamma; // Left/Right tilt (-90 to 90)
 
-            document.getElementById("betaVal").textContent = Math.round(b);
-            document.getElementById("gammaVal").textContent = Math.round(g);
+            // Calculate the DIFFERENCE from the center point
+            // This allows you to hold the phone at any angle (e.g. 45 deg)
+            // and that becomes "Zero movement".
+            let deltaBeta = beta - center.beta;
+            let deltaGamma = gamma - center.gamma;
 
-            // Move Logic (Simple Velocity)
-            // Gamma = Left/Right Tilt (-90 to 90)
-            // Beta = Front/Back Tilt (-180 to 180)
+            // Update Debug Info
+            debugInfo.innerText = `β:${Math.round(beta)} (Δ${Math.round(deltaBeta)}) | γ:${Math.round(gamma)} (Δ${Math.round(deltaGamma)})`;
+
+            // Move the cursor
+            // If delta is positive, we move that direction.
+            // We multiply by sensitivity to make it usable speed.
             
-            curX += g * 0.2 * sensitivity; // Multiplier increased
-            curY += b * 0.2 * sensitivity;
+            pos.x += deltaGamma * sensitivity; 
+            pos.y += deltaBeta * sensitivity;
 
-            // Boundaries
-            if(curX < 5) curX = 5;
-            if(curX > 95) curX = 95;
-            if(curY < 5) curY = 5;
-            if(curY > 95) curY = 95;
+            // Keep cursor inside the box
+            const rect = trackpad.getBoundingClientRect();
+            const maxX = rect.width - 40; // Subtract cursor size
+            const maxY = rect.height - 40;
 
-            cursor.style.left = curX + "%";
-            cursor.style.top = curY + "%";
+            if (pos.x < 0) pos.x = 0;
+            if (pos.x > maxX) pos.x = maxX;
+            if (pos.y < 0) pos.y = 0;
+            if (pos.y > maxY) pos.y = maxY;
+
+            updateCursorVisual();
         }
 
         function handleMotion(event) {
-            const acc = event.accelerationIncludingGravity;
-            if (acc) {
-                document.getElementById("accXVal").textContent = Math.round(acc.x);
-            }
+            // Not strictly used for mouse movement here, but kept for completeness
         }
 
-        function initSensors() {
-            log("Button Clicked. Requesting Access...");
+        // --- Controls ---
 
-            // 1. Check if we need to ask permission (Android 12+ / iOS 13+)
+        function startSensors() {
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                log("Permission API Detected. Requesting...");
                 DeviceOrientationEvent.requestPermission()
                     .then(response => {
                         if (response === 'granted') {
-                            permStatus.textContent = "Granted";
-                            permStatus.classList.add("active");
-                            startListeners();
+                            activateListeners();
                         } else {
-                            permStatus.textContent = "Denied";
-                            permStatus.classList.add("error");
-                            log("User denied permission.");
+                            alert("Permission denied");
                         }
                     })
-                    .catch(error => {
-                        log("Permission Error: " + error);
-                    });
+                    .catch(console.error);
             } else {
-                // 2. Older Android / Desktop
-                log("No Permission API needed. Attaching listeners...");
-                permStatus.textContent = "Not Required";
-                startListeners();
+                activateListeners();
             }
         }
 
-        function startListeners() {
-            // Use the exact syntax you provided
+        function activateListeners() {
             window.addEventListener("deviceorientation", handleOrientation, true);
             window.addEventListener("devicemotion", handleMotion, true);
             
-            document.getElementById('startBtn').disabled = true;
-            document.getElementById('startBtn').textContent = "SYSTEM ACTIVE";
-            log("Listeners attached. Tilt the phone now.");
+            isRunning = true;
+            btnStart.disabled = true;
+            btnStart.textContent = "Active";
+            btnCal.disabled = false;
+            statusText.textContent = "Sensors ON. Hold steady and press Calibrate.";
         }
 
-        document.getElementById('startBtn').addEventListener('click', initSensors);
+        function calibrate() {
+            // We need the current orientation values to set as "Zero".
+            // We grab them from the last event, but since we don't store the event globally
+            // we will just ask the user to press it. 
+            // HOWEVER, the event object isn't available in the click handler.
+            // So we just set a flag, and the *next* sensor update will capture the "center".
+            
+            // BETTER APPROACH: Read a recent value?
+            // Since sensors fire ~60hz, we can just assume the *current* values in the handler
+            // are the ones we want to lock.
+            
+            // Let's cheat slightly: We'll capture the values inside the orientation handler
+            // but only when a specific flag is set.
+            
+            statusText.textContent = "Calibrating... Keep holding still.";
+            
+            // We set a timeout to read the values in 100ms
+            setTimeout(() => {
+                // Since we can't access the event object here, we rely on the loop
+                // to treat the *current* position as center immediately.
+                // We will do this by simply resetting the 'center' variables 
+                // to whatever the latest incoming beta/gamma were.
+                // But wait, we don't have access to them here.
+                
+                // Fix: Let's rely on the event loop to capture the "First Calibrated State".
+                // We will toggle a flag.
+                justCalibrated = true; 
+            }, 50);
+        }
 
-        // Initial log
-        log("System Ready. Waiting for user interaction.");
+        let justCalibrated = false;
+
+        // Redefine handler slightly to support the one-shot calibration
+        window.removeEventListener("deviceorientation", handleOrientation); // Clear old
+        
+        window.addEventListener("deviceorientation", (event) => {
+            // Update text always
+            debugInfo.innerText = `B:${Math.round(event.beta)} G:${Math.round(event.gamma)}`;
+
+            if (!isRunning) return;
+
+            if (justCalibrated) {
+                center.beta = event.beta || 0;
+                center.gamma = event.gamma || 0;
+                calibrated = true;
+                justCalibrated = false;
+                statusText.textContent = "Calibrated! Tilt to move.";
+                statusText.style.color = "#0f0";
+            }
+
+            if (calibrated) {
+                let beta = event.beta || 0;
+                let gamma = event.gamma || 0;
+                
+                // Calculate Delta
+                let deltaBeta = beta - center.beta;
+                let deltaGamma = gamma - center.gamma;
+
+                // Deadzone (ignore tiny wobbles)
+                if (Math.abs(deltaBeta) < 2) deltaBeta = 0;
+                if (Math.abs(deltaGamma) < 2) deltaGamma = 0;
+
+                pos.x += deltaGamma * sensitivity;
+                pos.y += deltaBeta * sensitivity;
+
+                const rect = trackpad.getBoundingClientRect();
+                const maxX = rect.width - 40;
+                const maxY = rect.height - 40;
+
+                if (pos.x < 0) pos.x = 0;
+                if (pos.x > maxX) pos.x = maxX;
+                if (pos.y < 0) pos.y = 0;
+                if (pos.y > maxY) pos.y = maxY;
+
+                updateCursorVisual();
+            }
+        }, true);
+
+
+        btnStart.addEventListener('click', startSensors);
+        btnCal.addEventListener('click', () => {
+            justCalibrated = true;
+            statusText.textContent = "Calibrating...";
+        });
+
     </script>
 </body>
 </html>
