@@ -2,258 +2,204 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Android Motion Mouse Debug</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Motion Diagnostic</title>
     <style>
         body {
-            font-family: monospace;
-            background-color: #121212;
-            color: #00ff00;
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #000;
+            color: #0f0;
+            padding: 15px;
             margin: 0;
-            padding: 20px;
+            height: 100vh;
             display: flex;
             flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
         }
 
-        h2 { margin-top: 0; text-align: center; color: white; }
+        h1 { color: #fff; font-size: 1.2rem; margin: 0 0 10px 0; border-bottom: 1px solid #333; padding-bottom: 10px; }
 
-        .container {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            background: #1e1e1e;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-
-        .data-box {
-            background: #000;
-            padding: 10px;
+        .status-box {
+            background: #111;
             border: 1px solid #333;
-            text-align: center;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
         }
 
-        .data-label {
-            font-size: 0.8rem;
-            color: #888;
-            margin-bottom: 5px;
-            display: block;
-        }
+        .row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+        .label { color: #888; }
+        .val { font-weight: bold; color: #fff; }
+        .active { color: #0f0; }
+        .error { color: #f00; }
 
-        .data-value {
-            font-size: 1.2rem;
-            font-weight: bold;
-        }
-
-        /* The Trackpad Area */
-        #trackpad {
+        #cursorArea {
             flex: 1;
-            background: #252525;
-            border: 2px dashed #444;
-            border-radius: 10px;
+            background: #222;
+            border: 2px solid #444;
             position: relative;
+            margin-bottom: 10px;
+            border-radius: 8px;
             overflow: hidden;
-            margin-bottom: 20px;
         }
 
-        /* The Virtual Mouse Cursor */
         #cursor {
-            width: 40px;
-            height: 40px;
-            background: radial-gradient(circle, #ff0055 20%, transparent 20%);
-            border: 2px solid #ff0055;
-            border-radius: 50%;
-            position: absolute;
-            top: 50%;
-            left: 50%;
+            width: 30px; height: 30px;
+            background: red; border-radius: 50%;
+            position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             pointer-events: none;
-            box-shadow: 0 0 15px #ff0055;
-            transition: transform 0.05s linear; /* Smooth movement */
+            box-shadow: 0 0 10px red;
         }
 
-        /* Controls */
-        .controls {
-            display: flex;
-            gap: 10px;
+        #logArea {
+            height: 100px;
+            background: #000;
+            border: 1px solid #333;
+            overflow-y: scroll;
+            font-size: 10px;
+            color: #aaa;
+            padding: 5px;
+            margin-bottom: 10px;
         }
 
         button {
-            flex: 1;
-            padding: 15px;
-            background: #333;
+            width: 100%;
+            padding: 20px;
+            background: #0066cc;
             color: white;
-            border: 1px solid #555;
+            border: none;
+            font-size: 1.2rem;
+            font-weight: bold;
             border-radius: 5px;
-            font-size: 1rem;
-            cursor: pointer;
         }
-
-        button:active { background: #555; }
-        button.primary { background: #007bff; border-color: #0056b3; }
-
-        #warning {
-            color: yellow;
-            text-align: center;
-            font-size: 0.8rem;
-            margin-top: 5px;
-        }
+        button:disabled { background: #333; color: #666; }
     </style>
 </head>
 <body>
 
-    <h2>Android Sensor Mouse</h2>
+    <h1>SENSOR DIAGNOSTIC</h1>
 
-    <!-- Raw Data Display -->
-    <div class="container">
-        <div class="data-box">
-            <span class="data-label">Alpha (Z)</span>
-            <span id="alpha" class="data-value">0°</span>
-        </div>
-        <div class="data-box">
-            <span class="data-label">Beta (X)</span>
-            <span id="beta" class="data-value">0°</span>
-        </div>
-        <div class="data-box">
-            <span class="data-label">Gamma (Y)</span>
-            <span id="gamma" class="data-value">0°</span>
-        </div>
-        <div class="data-box">
-            <span class="data-label">Acc X</span>
-            <span id="accelX" class="data-value">0</span>
-        </div>
+    <div class="status-box">
+        <div class="row"><span class="label">Permission State:</span> <span id="permStatus" class="val">Unknown</span></div>
+        <div class="row"><span class="label">Sensor Stream:</span> <span id="sensorStatus" class="val">Inactive</span></div>
+        <div class="row"><span class="label">Beta (Tilt Y):</span> <span id="betaVal" class="val">0</span></div>
+        <div class="row"><span class="label">Gamma (Tilt X):</span> <span id="gammaVal" class="val">0</span></div>
+        <div class="row"><span class="label">Accel X:</span> <span id="accXVal" class="val">0</span></div>
     </div>
 
-    <!-- Visual Trackpad -->
-    <div id="trackpad">
+    <div id="cursorArea">
         <div id="cursor"></div>
+        <div style="position:absolute; top:10px; left:10px; color:#555; font-size:0.8rem;">Visual Output</div>
     </div>
 
-    <div id="warning">If values stay at 0, you must use HTTPS (localhost or ngrok).</div>
+    <div style="color: #fff; font-size: 0.8rem; margin-bottom: 2px;">Live System Log:</div>
+    <div id="logArea"></div>
 
-    <div class="controls">
-        <button id="btnStart" class="primary">Start Sensor Connection</button>
-        <button id="btnReset">Recenter</button>
-    </div>
+    <button id="startBtn">ENABLE & DIAGNOSE</button>
 
     <script>
-        // --- Configuration ---
-        let sensitivity = 3.0; // Adjust this to make mouse faster or slower
-        let centerX = 50; // Percentage
-        let centerY = 50; // Percentage
-        let currentX = 50;
-        let currentY = 50;
-        
-        // Elements
+        const logEl = document.getElementById('logArea');
         const cursor = document.getElementById('cursor');
-        const btnStart = document.getElementById('btnStart');
-        const btnReset = document.getElementById('btnReset');
-        const warning = document.getElementById('warning');
+        const permStatus = document.getElementById('permStatus');
+        const sensorStatus = document.getElementById('sensorStatus');
+        
+        let curX = 50;
+        let curY = 50;
+        let sensitivity = 2.0; // Increased for testing
 
-        // State
-        let isRunning = false;
+        function log(msg) {
+            const line = document.createElement('div');
+            line.textContent = "> " + msg;
+            logEl.appendChild(line);
+            logEl.scrollTop = logEl.scrollHeight;
+            console.log(msg);
+        }
 
-        // --- Your Snippet Integration ---
+        // Catch any global errors
+        window.onerror = function(message, source, lineno, colno, error) {
+            log("JS ERROR: " + message);
+        };
+
         function handleOrientation(event) {
-            // 1. Update Raw Data UI
-            document.getElementById("alpha").textContent = Math.round(event.alpha) + "°";
-            document.getElementById("beta").textContent = Math.round(event.beta) + "°";
-            document.getElementById("gamma").textContent = Math.round(event.gamma) + "°";
+            log("Orientation Event Fired");
+            sensorStatus.textContent = "Receiving Data";
+            sensorStatus.classList.add("active");
 
-            // 2. Move Mouse Logic
-            if (isRunning) {
-                // Beta: Front/Back Tilt (-180 to 180). Negative usually means "Top tilting away".
-                // Gamma: Left/Right Tilt (-90 to 90).
-                
-                let beta = event.beta; 
-                let gamma = event.gamma;
+            // Get values, handle nulls
+            let b = event.beta || 0;
+            let g = event.gamma || 0;
+            let a = event.alpha || 0;
 
-                // Simple velocity-based movement
-                // We add the tilt amount to the current position
-                // The sensitivity multiplier makes it move faster
-                
-                // Check if values are null (sometimes happens on init)
-                if(beta === null) beta = 0;
-                if(gamma === null) gamma = 0;
+            document.getElementById("betaVal").textContent = Math.round(b);
+            document.getElementById("gammaVal").textContent = Math.round(g);
 
-                // Move X based on Gamma (Left/Right)
-                // Gamma > 0 (Right) -> Increase X
-                currentX += gamma * 0.1 * sensitivity;
+            // Move Logic (Simple Velocity)
+            // Gamma = Left/Right Tilt (-90 to 90)
+            // Beta = Front/Back Tilt (-180 to 180)
+            
+            curX += g * 0.2 * sensitivity; // Multiplier increased
+            curY += b * 0.2 * sensitivity;
 
-                // Move Y based on Beta (Front/Back)
-                // Beta < 0 (Up/Away) -> Decrease Y (screen coords: 0 is top)
-                currentY += beta * 0.1 * sensitivity;
+            // Boundaries
+            if(curX < 5) curX = 5;
+            if(curX > 95) curX = 95;
+            if(curY < 5) curY = 5;
+            if(curY > 95) curY = 95;
 
-                // Clamp to screen (0% to 100%)
-                if (currentX < 0) currentX = 0;
-                if (currentX > 100) currentX = 100;
-                if (currentY < 0) currentY = 0;
-                if (currentY > 100) currentY = 100;
-
-                // Apply to DOM
-                cursor.style.left = currentX + "%";
-                cursor.style.top = currentY + "%";
-            }
+            cursor.style.left = curX + "%";
+            cursor.style.top = curY + "%";
         }
 
         function handleMotion(event) {
-            // accelerationIncludingGravity provides acceleration with gravity included
-            const acc = event.accelerationIncludingGravity; 
+            const acc = event.accelerationIncludingGravity;
             if (acc) {
-                document.getElementById("accelX").textContent = Math.round(acc.x) + " m/s²";
-                // We can add Accel Y/Z to UI if needed
+                document.getElementById("accXVal").textContent = Math.round(acc.x);
             }
         }
 
-        // --- Initialization ---
+        function initSensors() {
+            log("Button Clicked. Requesting Access...");
 
-        function startSensors() {
-            // 1. Add Listeners (Using your exact syntax)
-            window.addEventListener("deviceorientation", handleOrientation, true);
-            window.addEventListener("devicemotion", handleMotion, true);
-
-            // 2. iOS 13+ Permission Handling (Required even if testing on Android occasionally, 
-            // or if you switch to iPhone later)
+            // 1. Check if we need to ask permission (Android 12+ / iOS 13+)
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                log("Permission API Detected. Requesting...");
                 DeviceOrientationEvent.requestPermission()
                     .then(response => {
-                        if (response == 'granted') {
-                            isRunning = true;
-                            btnStart.textContent = "Sensors Active";
-                            btnStart.disabled = true;
-                            resetPosition();
+                        if (response === 'granted') {
+                            permStatus.textContent = "Granted";
+                            permStatus.classList.add("active");
+                            startListeners();
                         } else {
-                            alert("Permission denied");
+                            permStatus.textContent = "Denied";
+                            permStatus.classList.add("error");
+                            log("User denied permission.");
                         }
                     })
-                    .catch(console.error);
+                    .catch(error => {
+                        log("Permission Error: " + error);
+                    });
             } else {
-                // Non-iOS 13+ devices (Standard Android)
-                isRunning = true;
-                btnStart.textContent = "Sensors Active";
-                btnStart.disabled = true;
-                resetPosition();
-                
-                // Visual feedback that we are listening
-                warning.textContent = "Listening for motion... Tilt your phone.";
-                warning.style.color = "#00ff00";
+                // 2. Older Android / Desktop
+                log("No Permission API needed. Attaching listeners...");
+                permStatus.textContent = "Not Required";
+                startListeners();
             }
         }
 
-        function resetPosition() {
-            currentX = 50;
-            currentY = 50;
-            cursor.style.left = "50%";
-            cursor.style.top = "50%";
+        function startListeners() {
+            // Use the exact syntax you provided
+            window.addEventListener("deviceorientation", handleOrientation, true);
+            window.addEventListener("devicemotion", handleMotion, true);
+            
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('startBtn').textContent = "SYSTEM ACTIVE";
+            log("Listeners attached. Tilt the phone now.");
         }
 
-        // Button Events
-        btnStart.addEventListener('click', startSensors);
-        btnReset.addEventListener('click', resetPosition);
+        document.getElementById('startBtn').addEventListener('click', initSensors);
 
+        // Initial log
+        log("System Ready. Waiting for user interaction.");
     </script>
 </body>
 </html>
